@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./models:/app/models
+    environment:
+      - VILLU_LOGGING__LEVEL=INFO
+    restart: always
+
+  frontend:
+    build: .
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "frontend/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    depends_on:
+      - api
+    restart: always

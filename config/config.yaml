@@ -1,0 +1,124 @@
+# ============================================================
+# Villu Pattu Tala Identification System — Central Config
+# ============================================================
+
+project:
+  name: "Villu Pattu Tala Identifier"
+  version: "1.0.0"
+  description: "AI-based rhythmic cycle identification for Villu Pattu folk music"
+
+# ---- Audio Processing ----
+audio:
+  sample_rate: 22050          # Hz — librosa default, good for music
+  hop_length: 512             # STFT hop size in samples
+  n_fft: 2048                 # FFT window size
+  n_mfcc: 40                  # Number of MFCC coefficients
+  n_mels: 128                 # Mel filterbank bins
+  n_chroma: 12                # Chroma feature bins
+  fmin: 20                    # Min frequency (Hz) for CQT/mel
+  fmax: 8000                  # Max frequency (Hz)
+  frame_length: 2048          # Frame length for time-domain features
+  max_duration: 60            # Max audio clip duration (seconds) for inference
+  silence_top_db: 30          # dB threshold for silence trimming
+
+# ---- Tala Definitions ----
+# Each tala has a beat count (aksharas) and canonical beat intervals
+talas:
+  Adi:
+    beats: 8
+    pattern: [4, 2, 2]        # Laghu+Drutam+Drutam
+    description: "Most common tala in Carnatic music — 8 beats"
+  Rupaka:
+    beats: 6
+    pattern: [2, 4]            # Drutam+Laghu
+    description: "6-beat tala — drutam + chatusra laghu"
+  Misra_Chapu:
+    beats: 7
+    pattern: [3, 4]            # 3+4 grouping
+    description: "7-beat folk tala common in Villu Pattu"
+  Khanda_Chapu:
+    beats: 5
+    pattern: [2, 3]            # 2+3 grouping
+    description: "5-beat folk tala"
+  Other:
+    beats: 0
+    pattern: []
+    description: "Unknown or mixed tala"
+
+# ---- Dataset ----
+dataset:
+  root: "dataset"
+  splits_dir: "dataset/splits"
+  features_csv: "dataset/features.csv"
+  test_size: 0.15
+  val_size: 0.15
+  random_seed: 42
+  synthetic:
+    samples_per_tala: 100     # Synthetic audio samples per tala class
+    duration: 10              # Seconds per synthetic sample
+    base_bpm: 120             # Base BPM for synthetic generation
+
+# ---- Feature Extraction ----
+features:
+  # Which feature groups to extract
+  use_mfcc: true
+  use_chroma: true
+  use_spectral: true
+  use_rhythm: true
+  use_cqt: true
+  use_mel_spectrogram: true
+  use_harmonic_percussive: true
+  # Output mel spectrogram image size for CNN
+  mel_image_size: [128, 128]
+
+# ---- Training ----
+training:
+  random_seed: 42
+  cv_folds: 5
+  test_size: 0.15
+  # Classical ML
+  classical:
+    n_estimators_rf: 300
+    xgb_n_estimators: 200
+    svm_c: 1.0
+    knn_k: 5
+  # Deep Learning
+  deep:
+    epochs: 50
+    batch_size: 32
+    learning_rate: 0.001
+    patience: 10              # Early stopping patience
+    weight_decay: 1e-4
+
+# ---- Models ----
+models:
+  saved_dir: "models/saved_models"
+  best_classical: "best_classical_model.pkl"
+  cnn: "cnn_model.pt"
+  crnn: "crnn_model.pt"
+  label_encoder: "label_encoder.pkl"
+  metadata: "model_metadata.json"
+
+# ---- Outputs ----
+outputs:
+  dir: "outputs"
+  plots_dir: "outputs/plots"
+  reports_dir: "outputs/reports"
+
+# ---- API ----
+api:
+  host: "0.0.0.0"
+  port: 8000
+  upload_dir: "outputs/uploads"
+  history_db: "outputs/history.db"
+  max_upload_size_mb: 50
+  cors_origins:
+    - "http://localhost:8501"
+    - "http://localhost:3000"
+
+# ---- Logging ----
+logging:
+  level: "INFO"
+  log_file: "outputs/app.log"
+  max_bytes: 10485760         # 10 MB
+  backup_count: 5

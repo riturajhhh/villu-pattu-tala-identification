@@ -1,0 +1,31 @@
+# Core Rhythmic & Signal Processing
+librosa>=0.10.1
+soundfile>=0.12.1
+noisereduce>=3.0.0
+scipy>=1.11.0
+numpy>=1.23.0
+pandas>=2.0.0
+
+# Machine Learning & Deep Learning
+scikit-learn>=1.3.0
+xgboost>=1.7.0
+torch>=2.0.0
+
+# FastAPI Backend & Utilities
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+python-multipart>=0.0.6
+sqlalchemy>=2.0.0
+pyyaml>=6.0
+yt-dlp>=2023.7.6
+
+# Streamlit Frontend & Visualizations
+streamlit>=1.25.0
+plotly>=5.15.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+Pillow>=9.5.0
+
+# Testing
+pytest>=7.4.0
+httpx>=0.24.1
