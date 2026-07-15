@@ -90,6 +90,11 @@ training:
     patience: 10              # Early stopping patience
     weight_decay: 1e-4
 
+# ---- Experiment Tracking ----
+experiments:
+  tracking_dir: "outputs/experiments"
+  mlflow_enabled: true
+  
 # ---- Models ----
 models:
   saved_dir: "models/saved_models"

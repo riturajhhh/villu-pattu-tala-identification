@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from training.train_classical import train_all_models
 from training.train_cnn import train_cnn
 from training.train_crnn import train_crnn
+from utils.experiment_tracker import ExperimentTracker
 from utils.logger import setup_logger
 
 logger = setup_logger("villu_pattu.train_master", level="INFO")
@@ -46,6 +47,13 @@ def run_master_training(
     logger.info("=" * 60)
     logger.info("MASTER MODEL TRAINING ENGINE — VILLU PATTU TALA SYSTEM")
     logger.info("=" * 60)
+
+    tracker = ExperimentTracker(experiment_name="villu_pattu_tala_models")
+    tracker.log_params({
+        "dataset_root": str(dataset_root),
+        "epochs": epochs,
+        "batch_size": batch_size,
+    })
 
     # 1. Train Classical Models
     classical_meta = None
@@ -120,6 +128,11 @@ def run_master_training(
     total_time = time.time() - start_time
     logger.info(f"\nTotal Pipeline Execution Time: {total_time/60:.1f} minutes")
     logger.info("=" * 60)
+    
+    # Track results
+    tracker.log_metrics({row["model"]: row["accuracy"] for row in comparison_rows})
+    tracker.log_artifact(output_dir / "model_comparison.csv")
+    tracker.save_run()
 
 
 if __name__ == "__main__":

@@ -204,3 +204,66 @@ def plot_mfcc_heatmap(
     fig.colorbar(img, ax=ax)
     plt.tight_layout()
     return fig
+
+
+def plot_chromagram(
+    y: np.ndarray,
+    sr: int,
+    hop_length: int = 512,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Plot a Chromagram showing pitch class distribution over time."""
+    import librosa
+    import librosa.display
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 4))
+    else:
+        fig = ax.figure
+
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
+
+    img = librosa.display.specshow(
+        chroma,
+        y_axis='chroma',
+        x_axis='time',
+        ax=ax,
+        cmap='coolwarm'
+    )
+    ax.set_title('Chromagram (Pitch Class)', fontsize=12, fontweight="bold", pad=10)
+    fig.colorbar(img, ax=ax)
+    plt.tight_layout()
+    return fig
+
+
+def plot_tempogram(
+    y: np.ndarray,
+    sr: int,
+    hop_length: int = 512,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Plot a Fourier Tempogram showing tempo variations over time."""
+    import librosa
+    import librosa.display
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 4))
+    else:
+        fig = ax.figure
+
+    oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    tempogram = librosa.feature.tempogram(onset_envelope=oenv, sr=sr, hop_length=hop_length)
+
+    img = librosa.display.specshow(
+        tempogram,
+        sr=sr,
+        hop_length=hop_length,
+        x_axis='time',
+        y_axis='tempo',
+        cmap='magma',
+        ax=ax
+    )
+    ax.set_title('Fourier Tempogram', fontsize=12, fontweight="bold", pad=10)
+    fig.colorbar(img, ax=ax)
+    plt.tight_layout()
+    return fig

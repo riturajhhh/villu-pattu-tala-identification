@@ -52,3 +52,21 @@ class ModelInfoSchema(BaseModel):
     accuracy: float
     n_features: Optional[int] = None
     training_time_seconds: Optional[float] = None
+
+
+class FeedbackSubmitSchema(BaseModel):
+    """Schema for POST /feedback."""
+    file_id: str
+    filename: str
+    original_tala: str
+    corrected_tala: str
+    confidence: float
+    notes: Optional[str] = ""
+
+
+class FeedbackStatsSchema(BaseModel):
+    """Schema for GET /feedback/stats."""
+    total_feedbacks: int
+    corrections_by_tala: Dict[str, int]
+    recent_corrections: List[Dict[str, Any]]
+

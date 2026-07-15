@@ -53,6 +53,21 @@ class PredictionHistory(Base):
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
 
+class ExpertFeedback(Base):
+    """ORM Model for storing expert corrections on Tala predictions (active learning)."""
+
+    __tablename__ = "expert_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_id = Column(String, index=True)
+    filename = Column(String)
+    original_tala = Column(String)
+    corrected_tala = Column(String, index=True)
+    confidence = Column(Float)
+    notes = Column(String, default="")
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 def init_db() -> None:
     """Create all tables in the database."""
     Base.metadata.create_all(bind=engine)

@@ -23,6 +23,8 @@ from evaluation.visualizer import (
     plot_mfcc_heatmap,
     plot_onset_envelope,
     plot_waveform,
+    plot_chromagram,
+    plot_tempogram,
 )
 from feature_extraction.feature_extractor import FeatureExtractor
 from preprocessing.audio_preprocessor import create_preprocessor
@@ -95,11 +97,52 @@ def extract_and_visualize_features(file_id: str):
         # MFCC
         fig_mfcc = plot_mfcc_heatmap(y, sr)
 
+        # New Plots
+        fig_chroma = plot_chromagram(y, sr)
+        fig_tempo = plot_tempogram(y, sr)
+        
+        # Optional Grad-CAM overlay
+        gradcam_b64 = None
+        try:
+            from api.model_manager import ModelManager
+            manager = ModelManager()
+            # If CNN is loaded and we have a mel spectrogram
+            if manager.cnn_model is not None:
+                from evaluation.explainability import generate_gradcam_heatmap, plot_gradcam_overlay
+                mel_image = extractor.extract_mel_image_from_waveform(y, sr)
+                if mel_image is not None:
+                    import torch
+                    tensor_x = torch.tensor(mel_image, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+                    # We just need any class for the explanation (could be predicted class)
+                    with torch.no_grad():
+                        logits = manager.cnn_model(tensor_x)
+                        pred_class = int(logits.argmax(dim=1)[0])
+                        
+                    heatmap = generate_gradcam_heatmap(manager.cnn_model, tensor_x, pred_class)
+                    if heatmap is not None:
+                        fig_gradcam = plot_gradcam_overlay(mel_image, heatmap)
+                        gradcam_b64 = _fig_to_base64(fig_gradcam)
+        except Exception as exc:
+            logger.warning(f"Grad-CAM generation failed, skipping: {exc}")
+
         # Build response
         clean_features = {
             k: float(v) for k, v in features.items()
             if isinstance(v, (int, float, np.integer, np.floating))
         }
+
+        plots_dict = {
+            "waveform": _fig_to_base64(fig_wave),
+            "beat_tracking": _fig_to_base64(fig_beats),
+            "mel_spectrogram": _fig_to_base64(fig_mel),
+            "onset_envelope": _fig_to_base64(fig_onset),
+            "mfcc": _fig_to_base64(fig_mfcc),
+            "chromagram": _fig_to_base64(fig_chroma),
+            "tempogram": _fig_to_base64(fig_tempo),
+        }
+        
+        if gradcam_b64:
+            plots_dict["gradcam"] = gradcam_b64
 
         return {
             "file_id": file_id,
@@ -107,13 +150,7 @@ def extract_and_visualize_features(file_id: str):
             "pulse_clarity": clean_features.get("pulse_clarity", 0.0),
             "duration": clean_features.get("duration", 0.0),
             "features": clean_features,
-            "plots": {
-                "waveform": _fig_to_base64(fig_wave),
-                "beat_tracking": _fig_to_base64(fig_beats),
-                "mel_spectrogram": _fig_to_base64(fig_mel),
-                "onset_envelope": _fig_to_base64(fig_onset),
-                "mfcc": _fig_to_base64(fig_mfcc),
-            }
+            "plots": plots_dict
         }
 
     except Exception as exc:

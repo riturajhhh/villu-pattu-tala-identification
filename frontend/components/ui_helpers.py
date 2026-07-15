@@ -73,6 +73,20 @@ def inject_custom_css() -> None:
             background-color: #2ea043 !important;
             transform: translateY(-1px);
         }
+        
+        /* Metronome Animation */
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(88, 166, 255, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(88, 166, 255, 0); }
+        }
+        .metronome-dot {
+            width: 30px;
+            height: 30px;
+            background-color: #58a6ff;
+            border-radius: 50%;
+            margin: 10px auto;
+        }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
@@ -129,3 +143,66 @@ def tala_badge(tala_name: str) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_metronome(bpm: float) -> None:
+    """Render a CSS-animated bouncing dot synced to the BPM."""
+    if bpm <= 0:
+        return
+    
+    # Calculate animation duration in seconds
+    duration_s = 60.0 / bpm
+    
+    st.markdown(
+        f"""
+        <div style="text-align: center; margin-top: 20px;">
+            <p style="color: #8b949e; margin-bottom: 5px;">Visual Metronome</p>
+            <div class="metronome-dot" style="animation: pulse {duration_s}s infinite ease-in-out;"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def feedback_form(tala_classes: list[str], file_id: str, original_tala: str, confidence: float) -> None:
+    """Render a form for experts to submit corrections."""
+    import requests
+    from utils.config_loader import get_config
+    try:
+        API_URL = get_config().api.base_url
+    except Exception:
+        API_URL = "http://localhost:8000"
+        
+    st.markdown("### 📝 Expert Correction")
+    st.markdown("If the predicted Tala is incorrect, please select the correct one below to improve future models.")
+    
+    with st.form(key=f"feedback_form_{file_id}"):
+        # Pre-select the original prediction or "Other" if not in list
+        default_idx = tala_classes.index(original_tala) if original_tala in tala_classes else 0
+        
+        correct_tala = st.selectbox(
+            "Correct Tala:", 
+            tala_classes + ["Other (Specify in notes)"],
+            index=default_idx
+        )
+        notes = st.text_area("Additional Notes (optional)", placeholder="E.g., Difficult tempo change around 1:20")
+        
+        submit = st.form_submit_button("Submit Correction")
+        
+        if submit:
+            payload = {
+                "file_id": file_id,
+                "filename": f"expert_feedback_{file_id}",
+                "original_tala": original_tala,
+                "corrected_tala": correct_tala,
+                "confidence": confidence,
+                "notes": notes
+            }
+            try:
+                res = requests.post(f"{API_URL}/feedback", json=payload)
+                if res.status_code == 200:
+                    st.success("✅ Thank you! Your feedback has been recorded for the next training cycle.")
+                else:
+                    st.error(f"Failed to submit feedback: {res.text}")
+            except Exception as e:
+                st.error(f"Error connecting to feedback API: {e}")

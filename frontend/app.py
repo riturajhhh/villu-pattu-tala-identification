@@ -21,6 +21,8 @@ from frontend.components.ui_helpers import (
     draw_header,
     inject_custom_css,
     tala_badge,
+    render_metronome,
+    feedback_form,
 )
 from frontend.components.visualizations import (
     plot_prediction_distribution,
@@ -40,7 +42,7 @@ inject_custom_css()
 draw_header()
 
 # Define navigation tabs
-tabs = st.tabs(["🎵 Home & Inference", "📜 History Logs", "⚙ Model Overview"])
+tabs = st.tabs(["🎵 Home & Inference", "📜 History Logs", "⚙ Model Overview", "🧠 Explainability & Feedback"])
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +185,26 @@ with tabs[0]:
                             """
                         )
                         st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Add metronome animation
+                        render_metronome(pred_data['bpm'])
+
+                    # Stash data for explainability tab
+                    st.session_state["last_file_id"] = file_id
+                    st.session_state["last_tala"] = pred_data["predicted_tala"]
+                    st.session_state["last_confidence"] = pred_data["confidence"]
+                    if "gradcam" in feat_data["plots"]:
+                        st.session_state["last_gradcam"] = feat_data["plots"]["gradcam"]
+                    else:
+                        st.session_state["last_gradcam"] = None
+                        
+                    # Also fetch classes for feedback form
+                    if "tala_classes" not in st.session_state:
+                        try:
+                            model_res = requests.get(f"{API_URL}/model-info")
+                            st.session_state["tala_classes"] = model_res.json().get("classes", [])
+                        except:
+                            st.session_state["tala_classes"] = ["Adi", "Rupaka", "Misra_Chapu", "Khanda_Chapu"]
 
                     # --- Visualization Plots Section ---
                     st.markdown("### 📊 Rhythmic & Spectral Analytics")
@@ -215,6 +237,23 @@ with tabs[0]:
                         feat_data["plots"]["onset_envelope"],
                         caption="Signal novelty curve demonstrating beat attack strengths."
                     )
+
+                    # Advanced Plots (Chromagram & Tempogram)
+                    col_spec3, col_spec4 = st.columns(2)
+                    with col_spec3:
+                        if "chromagram" in feat_data["plots"]:
+                            st.markdown("#### Chromagram (Pitch Class)")
+                            render_base64_image(
+                                feat_data["plots"]["chromagram"],
+                                caption="Pitch class distribution revealing harmonic/melodic content alongside rhythm."
+                            )
+                    with col_spec4:
+                        if "tempogram" in feat_data["plots"]:
+                            st.markdown("#### Fourier Tempogram")
+                            render_base64_image(
+                                feat_data["plots"]["tempogram"],
+                                caption="Tempo variations over time, highlighting cyclic structural alignments."
+                            )
 
                 except Exception as exc:
                     st.error(f"Connection error to backend API: {exc}")
@@ -290,3 +329,63 @@ with tabs[2]:
             st.error(f"Failed to fetch model info: {model_res.text}")
     except Exception as exc:
         st.error(f"Could not connect to model overview API: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Explainability & Feedback Tab
+# ---------------------------------------------------------------------------
+
+with tabs[3]:
+    st.subheader("Explainable AI & Active Learning")
+    
+    col_exp, col_fb = st.columns([1, 1])
+    
+    with col_exp:
+        st.markdown("### 🔍 Model Explainability (Grad-CAM)")
+        st.markdown("For Deep Learning (CNN/CRNN) models, we use Gradient-weighted Class Activation Mapping to highlight which parts of the spectrogram influenced the model's decision.")
+        
+        if st.session_state.get("last_gradcam"):
+            render_base64_image(
+                st.session_state["last_gradcam"], 
+                caption=f"Grad-CAM overlay for predicted Tala: {st.session_state.get('last_tala')}"
+            )
+        else:
+            st.info("No Grad-CAM explanation available. Run an inference using a Deep Learning model (CNN/CRNN) to generate visual explanations.")
+            
+    with col_fb:
+        if st.session_state.get("last_file_id"):
+            feedback_form(
+                st.session_state.get("tala_classes", []),
+                st.session_state["last_file_id"],
+                st.session_state.get("last_tala", ""),
+                st.session_state.get("last_confidence", 0.0)
+            )
+        else:
+            st.info("Run an inference first to submit expert feedback.")
+            
+    st.divider()
+    st.markdown("### 📈 Expert Feedback History")
+    
+    if st.button("🔄 Refresh Feedback Stats"):
+        st.rerun()
+        
+    try:
+        fb_res = requests.get(f"{API_URL}/feedback/stats")
+        if fb_res.status_code == 200:
+            fb_data = fb_res.json()
+            
+            st.markdown(f"**Total Corrections Submitted:** `{fb_data['total_feedbacks']}`")
+            
+            if fb_data['total_feedbacks'] > 0:
+                recent = fb_data.get('recent_corrections', [])
+                if recent:
+                    import pandas as pd
+                    df_fb = pd.DataFrame(recent)
+                    df_fb = df_fb[["timestamp", "original_tala", "corrected_tala", "file_id"]]
+                    df_fb.columns = ["Timestamp", "Original Prediction", "Expert Correction", "File ID"]
+                    st.dataframe(df_fb, use_container_width=True, hide_index=True)
+        else:
+            st.error("Failed to load feedback stats.")
+    except Exception as exc:
+        st.error(f"Could not connect to feedback stats API: {exc}")
+

@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.database import init_db
-from api.routes import features, history, model_info, predict, upload
+from api.routes import features, feedback, history, model_info, predict, upload
 from utils.config_loader import get_config
 from utils.logger import init_from_config
 
@@ -56,11 +56,12 @@ app.add_middleware(
 )
 
 # Register route sub-modules
-app.include_router(predict.router, tags=["Prediction"])
-app.include_router(upload.router, tags=["Upload"])
-app.include_router(history.router, tags=["History"])
+app.include_router(predict.router, tags=["Inference"])
+app.include_router(upload.router, tags=["Data/IO"])
+app.include_router(history.router, tags=["System"])
 app.include_router(features.router, tags=["Features"])
-app.include_router(model_info.router, tags=["Model Info"])
+app.include_router(model_info.router, tags=["System"])
+app.include_router(feedback.router, tags=["Active Learning"])
 
 
 @app.get("/")

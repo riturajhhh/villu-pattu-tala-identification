@@ -285,6 +285,104 @@ def extract_pulse_clarity(
 
 
 # ---------------------------------------------------------------------------
+# Cyclic Tempogram (Tala-gram) — phase alignment features
+# ---------------------------------------------------------------------------
+
+def extract_cyclic_tempogram_features(
+    y: np.ndarray,
+    sr: int = 22050,
+    hop_length: int = 512,
+) -> Dict[str, float]:
+    """Compute cyclic tempogram features for Tala-specific phase alignment.
+
+    Folds the onset strength envelope into assumed cycle lengths corresponding
+    to each known Tala (5, 6, 7, 8 beats). Measures how well the peaks in the
+    onset envelope align across repeated cycles, producing a *phase alignment
+    score* per cycle length and selecting the best-matching cycle.
+
+    This is a **domain-specific feature** designed for Indian folk meters where
+    standard Western beat-tracking often fails — the cyclic structure captures
+    the grouping patterns (e.g., 3+4 for Misra Chapu) that distinguish Talas.
+
+    Returns
+    -------
+    dict with keys:
+        ``cyclic_align_5``, ``cyclic_align_6``, ``cyclic_align_7``,
+        ``cyclic_align_8``, ``best_cycle_length``, ``best_cycle_score``
+    """
+    import librosa
+
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+
+    if len(onset_env) < 2:
+        return {
+            "cyclic_align_5": 0.0, "cyclic_align_6": 0.0,
+            "cyclic_align_7": 0.0, "cyclic_align_8": 0.0,
+            "best_cycle_length": 0, "best_cycle_score": 0.0,
+        }
+
+    # Estimate tempo to convert beat counts → frame counts
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
+    tempo_val = float(np.atleast_1d(tempo)[0])
+    if tempo_val < 30:
+        tempo_val = 120.0  # fallback
+
+    beat_period_frames = int((60.0 / tempo_val) * sr / hop_length)
+
+    features: Dict[str, float] = {}
+    cycle_scores: Dict[int, float] = {}
+
+    for n_beats in (5, 6, 7, 8):
+        cycle_len = beat_period_frames * n_beats
+        if cycle_len < 2 or cycle_len >= len(onset_env):
+            features[f"cyclic_align_{n_beats}"] = 0.0
+            cycle_scores[n_beats] = 0.0
+            continue
+
+        # Fold the onset envelope into cycles of length cycle_len
+        n_full_cycles = len(onset_env) // cycle_len
+        if n_full_cycles < 2:
+            features[f"cyclic_align_{n_beats}"] = 0.0
+            cycle_scores[n_beats] = 0.0
+            continue
+
+        usable = onset_env[:n_full_cycles * cycle_len]
+        folded = usable.reshape(n_full_cycles, cycle_len)
+
+        # Phase alignment = mean correlation of each cycle with the average template
+        avg_template = folded.mean(axis=0)
+        template_norm = np.linalg.norm(avg_template)
+
+        if template_norm < 1e-8:
+            score = 0.0
+        else:
+            correlations = []
+            for row in folded:
+                row_norm = np.linalg.norm(row)
+                if row_norm < 1e-8:
+                    correlations.append(0.0)
+                else:
+                    correlations.append(
+                        float(np.dot(row, avg_template) / (row_norm * template_norm))
+                    )
+            score = float(np.mean(correlations))
+
+        features[f"cyclic_align_{n_beats}"] = score
+        cycle_scores[n_beats] = score
+
+    # Best cycle
+    if cycle_scores:
+        best_cycle = max(cycle_scores, key=cycle_scores.get)
+        features["best_cycle_length"] = float(best_cycle)
+        features["best_cycle_score"] = cycle_scores[best_cycle]
+    else:
+        features["best_cycle_length"] = 0.0
+        features["best_cycle_score"] = 0.0
+
+    return features
+
+
+# ---------------------------------------------------------------------------
 # Combined
 # ---------------------------------------------------------------------------
 
@@ -304,4 +402,5 @@ def extract_all_rhythm_features(
     features.update(extract_tempogram_features(y, sr, hop_length))
     features.update(extract_rhythm_histogram(y, sr, hop_length))
     features.update(extract_pulse_clarity(y, sr, hop_length))
+    features.update(extract_cyclic_tempogram_features(y, sr, hop_length))
     return features

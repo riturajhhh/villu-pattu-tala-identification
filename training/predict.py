@@ -43,6 +43,8 @@ class TalaPredictor:
         self.label_encoder = None
         self.cnn_model = None
         self.crnn_model = None
+        self.onnx_session = None
+        self.onnx_model_type = None
         self.classes = None
 
     def _load_classical(self) -> bool:
@@ -109,6 +111,36 @@ class TalaPredictor:
             logger.error(f"Failed to load CRNN model: {exc}")
             return False
 
+    def _load_onnx(self, model_type: str = "cnn") -> bool:
+        """Load an ONNX Runtime session for faster inference."""
+        if self.onnx_session is not None and self.onnx_model_type == model_type:
+            return True
+        try:
+            import onnxruntime as ort
+
+            onnx_path = self.model_dir / f"{model_type}_model.onnx"
+            meta_path = self.model_dir / f"{model_type}_metadata.json"
+            if not (onnx_path.exists() and meta_path.exists()):
+                return False
+
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            self.classes = meta["classes"]
+
+            self.onnx_session = ort.InferenceSession(
+                str(onnx_path),
+                providers=["CPUExecutionProvider"],
+            )
+            self.onnx_model_type = model_type
+            logger.info(f"Loaded ONNX model ({model_type}) for accelerated inference")
+            return True
+        except ImportError:
+            logger.debug("onnxruntime not installed — skipping ONNX path")
+            return False
+        except Exception as exc:
+            logger.debug(f"Failed to load ONNX model: {exc}")
+            return False
+
     def predict(
         self,
         audio_path: str | Path,
@@ -135,7 +167,12 @@ class TalaPredictor:
 
         # Determine best available model type
         if model_type == "auto":
-            if self._load_classical():
+            # Prefer ONNX (fastest) > Classical > CNN > CRNN
+            if self._load_onnx("cnn"):
+                model_type = "onnx_cnn"
+            elif self._load_onnx("crnn"):
+                model_type = "onnx_crnn"
+            elif self._load_classical():
                 model_type = "classical"
             elif self._load_cnn():
                 model_type = "cnn"
@@ -155,6 +192,8 @@ class TalaPredictor:
             loaded = self._load_cnn()
         elif model_type == "crnn":
             loaded = self._load_crnn()
+        elif model_type.startswith("onnx_"):
+            loaded = self._load_onnx(model_type.replace("onnx_", ""))
 
         if not loaded:
             logger.error(f"Failed to load model for type '{model_type}'")
@@ -197,22 +236,33 @@ class TalaPredictor:
             predicted_idx = int(np.argmax(probabilities))
             
         else:
-            # CNN / CRNN take 2D Mel Spectrogram image
-            import torch
+            # CNN / CRNN / ONNX take 2D Mel Spectrogram image
             # Extract mel image from the already processed waveform
             mel = self.extractor.extract_mel_image_from_waveform(y, sr)
             if mel is None:
                 logger.error("Mel spectrogram extraction failed.")
                 return None
-                
-            tensor_x = torch.tensor(mel, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # Add batch & channel dims
-            
-            model = self.cnn_model if model_type == "cnn" else self.crnn_model
-            with torch.no_grad():
-                logits = model(tensor_x)
-                probs = torch.softmax(logits, dim=1)[0]
-                probabilities = probs.cpu().numpy()
+
+            if model_type.startswith("onnx_"):
+                # ONNX Runtime inference path
+                input_array = mel[np.newaxis, np.newaxis, :, :].astype(np.float32)
+                input_name = self.onnx_session.get_inputs()[0].name
+                logits = self.onnx_session.run(None, {input_name: input_array})[0]
+                probabilities = self._softmax(logits[0])
                 predicted_idx = int(np.argmax(probabilities))
+            else:
+                import torch
+                tensor_x = torch.tensor(mel, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+
+                model = self.cnn_model if model_type == "cnn" else self.crnn_model
+                with torch.no_grad():
+                    logits = model(tensor_x)
+                    probs = torch.softmax(logits, dim=1)[0]
+                    probabilities = probs.cpu().numpy()
+                    predicted_idx = int(np.argmax(probabilities))
+
+        # Derive the display model_used name (strip onnx_ prefix for cleaner display)
+        display_model = model_type.replace("onnx_", "") if model_type.startswith("onnx_") else model_type
 
         # Derive result variables from model outputs
         predicted_tala = self.classes[predicted_idx]
@@ -232,9 +282,15 @@ class TalaPredictor:
             "pulse_clarity": pulse_clarity,
             "top_predictions": top_predictions,
             "beat_positions": beat_positions,
-            "model_used": model_type,
+            "model_used": display_model,
             "duration": duration,
         }
+
+    @staticmethod
+    def _softmax(x: np.ndarray) -> np.ndarray:
+        """Compute softmax probabilities from raw logits."""
+        e_x = np.exp(x - np.max(x))
+        return e_x / (e_x.sum() + 1e-8)
 
 
 if __name__ == "__main__":

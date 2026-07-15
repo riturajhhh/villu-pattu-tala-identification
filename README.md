@@ -117,6 +117,16 @@ Train and compare traditional ML models along with CNN and CRNN architectures:
 python -m training.train --epochs 10
 ```
 
+### 🌟 Latest Advanced Features Added
+- **Cyclic Tempograms (Tala-grams)**: Extracts advanced phase alignment scores assuming 5, 6, 7, and 8-beat cycle bounds.
+- **Advanced Augmentation**: Humanization via micro-timing deviations (beat jitter) and environmental crowd/clapping noise synthesis.
+- **Explainable AI Tab (Grad-CAM)**: Visual decision inspection on Mel Spectrograms for CNN predictions.
+- **Experiment Tracking**: Built-in JSON tracker (MLflow-ready) for all model hyperparameters and training runs.
+- **Visual Enhancements**: Added Chromagram and Fourier Tempogram visualizations.
+- **ONNX Accelerated Inference**: Automatic fallback and export to ONNX runtime for faster inference.
+- **Interactive Explainability**: Includes Grad-CAM overlays highlighting spectral decision areas and a visual BPM metronome.
+- **Active Learning Feedback**: A built-in expert correction loop UI allows domain experts to label and fix misclassifications, saving them to an internal database for future model retraining.
+
 ### Step 4: Run the API and Web App
 Launch the FastAPI server and Streamlit frontend in separate terminals (if not using Docker):
 
